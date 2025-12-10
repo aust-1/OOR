@@ -1,5 +1,5 @@
 """
-Solve a nurse rostering problem from three CSV files using OR-Tools CP-SAT.
+Solve a nurse rostering problem from three CSV files using OR-Tools linear solver.
 
 Required files (in DATA_DIR):
 - nurses.csv:
@@ -16,11 +16,12 @@ Output:
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 import pandas as pd
-from ortools.sat.python import cp_model
+from ortools.linear_solver import pywraplp
 
 from config import OUTPUT_DIR
 from structs import CoverageRequirement, Nurse, Preference
@@ -88,11 +89,15 @@ def build_and_solve(
     time_limit_sec: int = 60,
 ) -> pd.DataFrame:
     """
-    Build the CP-SAT model, solve it, and return a schedule DataFrame.
+    Build the MIP model, solve it, and return a schedule DataFrame.
 
     The objective is to minimize penalties from violated preferences.
     """
-    model = cp_model.CpModel()
+    solver = pywraplp.Solver.CreateSolver("CBC_MIXED_INTEGER_PROGRAMMING")
+    if solver is None:
+        raise RuntimeError("Failed to create CBC solver.")
+    solver.SetNumThreads(8)
+    solver.SetTimeLimit(time_limit_sec * 1000)
 
     nurse_ids = [n.nurse_id for n in nurses]
 
@@ -102,15 +107,15 @@ def build_and_solve(
         (c.day, c.shift): c for c in coverage
     }
 
-    x: Dict[Tuple[int, str, str], cp_model.IntVar] = {}
+    x: Dict[Tuple[int, str, str], pywraplp.Variable] = {}
     for nid in nurse_ids:
         for d in days:
             for s in shifts:
-                x[(nid, d, s)] = model.NewBoolVar(f"x_n{nid}_{d}_{s}")
+                x[(nid, d, s)] = solver.BoolVar(f"x_n{nid}_{d}_{s}")
 
     for nid in nurse_ids:
         for d in days:
-            model.Add(sum(x[(nid, d, s)] for s in shifts) <= 1)
+            solver.Add(solver.Sum(x[(nid, d, s)] for s in shifts) <= 1)
 
     senior_like = {n.nurse_id for n in nurses if n.skill_level in {"senior", "icu"}}
     icu_only = {n.nurse_id for n in nurses if n.skill_level == "icu"}
@@ -119,47 +124,51 @@ def build_and_solve(
         for s in shifts:
             cov = cov_map[(d, s)]
 
-            model.Add(sum(x[(nid, d, s)] for nid in nurse_ids) >= cov.required_total)
+            solver.Add(
+                solver.Sum(x[(nid, d, s)] for nid in nurse_ids) >= cov.required_total
+            )
 
             if cov.required_senior > 0:
-                model.Add(
-                    sum(x[(nid, d, s)] for nid in senior_like) >= cov.required_senior
+                solver.Add(
+                    solver.Sum(x[(nid, d, s)] for nid in senior_like)
+                    >= cov.required_senior
                 )
 
             if cov.required_icu > 0:
-                model.Add(sum(x[(nid, d, s)] for nid in icu_only) >= cov.required_icu)
+                solver.Add(
+                    solver.Sum(x[(nid, d, s)] for nid in icu_only) >= cov.required_icu
+                )
 
-    penalty_terms: List[cp_model.LinearExpr] = []
+    penalty_vars: List[Tuple[pywraplp.Variable, int]] = []
     for i, pref in enumerate(preferences):
         key = (pref.nurse_id, pref.day, pref.shift)
         if key not in x:
             continue
 
         assign_var = x[key]
-        penalty = model.NewBoolVar(f"penalty_pref_{i}")
 
         if pref.preference_type == "avoid":
-            model.Add(penalty == assign_var)
+            penalty = solver.BoolVar(f"penalty_pref_{i}")
+            solver.Add(penalty == assign_var)
+            penalty_vars.append((penalty, pref.weight))
         elif pref.preference_type == "want":
-            model.Add(penalty + assign_var == 1)
+            penalty = solver.BoolVar(f"penalty_pref_{i}")
+            solver.Add(penalty + assign_var == 1)
+            penalty_vars.append((penalty, pref.weight))
         else:
             continue
 
-        penalty_terms.append(pref.weight * penalty)
+    objective = solver.Objective()
+    for penalty, weight in penalty_vars:
+        objective.SetCoefficient(penalty, weight)
+    objective.SetMinimization()
 
-    if penalty_terms:
-        model.Minimize(sum(penalty_terms))
-    else:
-        model.Minimize(0)
+    start = time.perf_counter()
+    status = solver.Solve()
+    runtime = time.perf_counter() - start
 
-    solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = time_limit_sec
-    solver.parameters.num_search_workers = 8
-    solver.parameters.log_search_progress = False
-
-    status = solver.Solve(model)
-
-    if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+    feasible_statuses = {pywraplp.Solver.OPTIMAL, pywraplp.Solver.FEASIBLE}
+    if status not in feasible_statuses:
         raise RuntimeError(f"No feasible solution found (status={status}).")
 
     rows = []
@@ -167,7 +176,7 @@ def build_and_solve(
         nurse = nurse_by_id[nid]
         for d in days:
             for s in shifts:
-                assigned = solver.Value(x[(nid, d, s)])
+                assigned = int(round(x[(nid, d, s)].solution_value()))
                 rows.append(
                     {
                         "nurse_id": nid,
@@ -180,6 +189,11 @@ def build_and_solve(
                 )
 
     schedule_df = pd.DataFrame(rows)
+
+    print("Objective:", objective.Value())
+    print("Runtime (s):", runtime)
+    print("Status:", "OPTIMAL" if status == pywraplp.Solver.OPTIMAL else "FEASIBLE")
+
     return schedule_df
 
 
