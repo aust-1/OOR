@@ -1,19 +1,11 @@
 """Generate complex nurse rostering simulation data. Prefers, skill levels, varied coverage."""
 
 import random
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-# region parameters
-N_NURSES = 20
-DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-SHIFTS = ["M", "A", "N"]  # Morning, Afternoon, Night
-
-OUTPUT_DIR = Path("data")
-OUTPUT_DIR.mkdir(exist_ok=True)
-# endregion
+from config import DAYS, N_NURSES, OUTPUT_DIR, SHIFTS
 
 # region nurses.csv
 rng = np.random.default_rng(42)

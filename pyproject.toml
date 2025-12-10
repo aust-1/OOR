@@ -7,6 +7,15 @@ name = "oor"
 version = "0.1.0"
 description = "operational optimization research project"
 dependencies = [
+    "matplotlib>=3.10.7",
     "numpy>=2.3.5",
+    "ortools>=9.14.6206",
     "pandas>=2.3.3",
+    "seaborn>=0.13.2",
+]
+
+[dependency-groups]
+dev = [
+    "pandas-stubs>=2.3.3.251201",
+    "types-seaborn>=0.13.2.20250914",
 ]

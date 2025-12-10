@@ -1,12 +1,9 @@
 """Basic simulation data generation. 20 nurses, 7 days, 3 shifts per day."""
 
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 
-OUTPUT_DIR = Path("data")
-OUTPUT_DIR.mkdir(exist_ok=True)
+from config import OUTPUT_DIR
 
 nurses = [f"Nurse_{i + 1}" for i in range(20)]
 days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
