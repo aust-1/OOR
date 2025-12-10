@@ -8,13 +8,13 @@ from config import DAYS, N_NURSES, OUTPUT_DIR
 names = [f"Nurse_{i + 1}" for i in range(N_NURSES)]
 schedule = pd.read_csv(OUTPUT_DIR / "solution.csv")
 
-df = schedule[schedule.Assigned == 1]
+df = schedule[schedule.assigned == 1]
 
 fig, ax = plt.subplots(figsize=(11, 6))
-for i, (nurse, day, shift) in df.iterrows():
+for i, (nurse_id, name, day, shift, _, _) in df.iterrows():
     ax.text(
         DAYS.index(day),
-        names.index(nurse),
+        names.index(name),
         shift,
         ha="center",
         va="center",

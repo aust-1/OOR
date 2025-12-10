@@ -184,8 +184,6 @@ def build_and_solve(
 
 
 def main() -> None:
-    output_path = Path("solution.csv")
-
     nurses, coverage, preferences, days, shifts = load_data(OUTPUT_DIR)
 
     schedule_df = build_and_solve(
