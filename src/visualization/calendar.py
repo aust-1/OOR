@@ -3,10 +3,10 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from config import DAYS, N_NURSES
+from config import DAYS, N_NURSES, OUTPUT_DIR
 
 names = [f"Nurse_{i + 1}" for i in range(N_NURSES)]
-schedule = pd.read_csv("solution.csv")
+schedule = pd.read_csv(OUTPUT_DIR / "solution.csv")
 
 df = schedule[schedule.Assigned == 1]
 

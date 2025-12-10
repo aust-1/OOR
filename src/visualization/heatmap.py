@@ -4,7 +4,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-schedule = pd.read_csv("solution.csv")
+from config import OUTPUT_DIR
+
+schedule = pd.read_csv(OUTPUT_DIR / "solution.csv")
 
 pivot = schedule.pivot_table(
     index="Nurse", columns=["Day", "Shift"], values="Assigned", fill_value=0
